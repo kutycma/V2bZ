@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/InazumaV/V2bX/cmd"
+	"github.com/kutycma/V2bZ/cmd"
 )
 
 func main() {

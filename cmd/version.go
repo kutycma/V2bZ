@@ -7,14 +7,14 @@ import (
 )
 
 var (
-	version  = "TempVersion" //use ldflags replace
-	codename = "V2bX"
-	intro    = "A V2board backend based on multi core"
+	version  = "TempVersion" //thay bằng ldflags
+	codename = "V2bZ"
+	intro    = "Backend V2board dựa trên nhiều core"
 )
 
 var versionCommand = cobra.Command{
 	Use:   "version",
-	Short: "Print version info",
+	Short: "In thông tin phiên bản",
 	Run: func(_ *cobra.Command, _ []string) {
 		showVersion()
 	},
@@ -33,8 +33,8 @@ _/      _/      _/    _/    _/      _/
   _/      _/_/_/_/  _/_/_/    _/      _/        
                                                 `)
 	fmt.Printf("%s %s (%s) \n", codename, version, intro)
-	//fmt.Printf("Supported cores: %s\n", strings.Join(vCore.RegisteredCore(), ", "))
+	//fmt.Printf("Core được hỗ trợ: %s\n", strings.Join(vCore.RegisteredCore(), ", "))
 	// Warning
-	//fmt.Println(Warn("This version need V2board version >= 1.7.0."))
-	//fmt.Println(Warn("The version have many changed for config, please check your config file"))
+	//fmt.Println(Warn("Phiên bản này cần V2board >= 1.7.0."))
+	//fmt.Println(Warn("Phiên bản này có nhiều thay đổi cấu hình, vui lòng kiểm tra file cấu hình"))
 }

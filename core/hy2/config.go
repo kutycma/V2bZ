@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/InazumaV/V2bX/api/panel"
-	"github.com/InazumaV/V2bX/conf"
 	"github.com/apernet/hysteria/core/v2/server"
 	"github.com/apernet/hysteria/extras/v2/correctnet"
 	"github.com/apernet/hysteria/extras/v2/masq"
@@ -20,6 +18,8 @@ import (
 	"github.com/apernet/hysteria/extras/v2/outbounds"
 	"github.com/apernet/hysteria/extras/v2/sniff"
 	eUtils "github.com/apernet/hysteria/extras/v2/utils"
+	"github.com/kutycma/V2bZ/api/panel"
+	"github.com/kutycma/V2bZ/conf"
 	"go.uber.org/zap"
 )
 

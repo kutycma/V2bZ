@@ -4,11 +4,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/InazumaV/V2bX/api/panel"
-	"github.com/InazumaV/V2bX/common/task"
-	"github.com/InazumaV/V2bX/conf"
-	vCore "github.com/InazumaV/V2bX/core"
-	"github.com/InazumaV/V2bX/limiter"
+	"github.com/kutycma/V2bZ/api/panel"
+	"github.com/kutycma/V2bZ/common/task"
+	"github.com/kutycma/V2bZ/conf"
+	vCore "github.com/kutycma/V2bZ/core"
+	"github.com/kutycma/V2bZ/limiter"
 	log "github.com/sirupsen/logrus"
 )
 

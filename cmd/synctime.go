@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/InazumaV/V2bX/common/systime"
 	"github.com/beevik/ntp"
+	"github.com/kutycma/V2bZ/common/systime"
 	"github.com/spf13/cobra"
 )
 
@@ -12,28 +12,28 @@ var ntpServer string
 
 var commandSyncTime = &cobra.Command{
 	Use:   "synctime",
-	Short: "Sync time from ntp server",
+	Short: "Đồng bộ thời gian từ server NTP",
 	Args:  cobra.NoArgs,
 	Run:   synctimeHandle,
 }
 
 func init() {
-	commandSyncTime.Flags().StringVar(&ntpServer, "server", "time.apple.com", "ntp server")
+	commandSyncTime.Flags().StringVar(&ntpServer, "server", "time.apple.com", "server NTP")
 	command.AddCommand(commandSyncTime)
 }
 
 func synctimeHandle(_ *cobra.Command, _ []string) {
 	t, err := ntp.Time(ntpServer)
 	if err != nil {
-		fmt.Println(Err("get time from server error: ", err))
-		fmt.Println(Err("同步时间失败"))
+		fmt.Println(Err("lỗi lấy thời gian từ server: ", err))
+		fmt.Println(Err("Đồng bộ thời gian thất bại"))
 		return
 	}
 	err = systime.SetSystemTime(t)
 	if err != nil {
-		fmt.Println(Err("set system time error: ", err))
-		fmt.Println(Err("同步时间失败"))
+		fmt.Println(Err("lỗi đặt thời gian hệ thống: ", err))
+		fmt.Println(Err("Đồng bộ thời gian thất bại"))
 		return
 	}
-	fmt.Println(Ok("同步时间成功"))
+	fmt.Println(Ok("Đồng bộ thời gian thành công"))
 }

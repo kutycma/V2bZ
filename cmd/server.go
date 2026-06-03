@@ -6,10 +6,10 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/InazumaV/V2bX/conf"
-	vCore "github.com/InazumaV/V2bX/core"
-	"github.com/InazumaV/V2bX/limiter"
-	"github.com/InazumaV/V2bX/node"
+	"github.com/kutycma/V2bZ/conf"
+	vCore "github.com/kutycma/V2bZ/core"
+	"github.com/kutycma/V2bZ/limiter"
+	"github.com/kutycma/V2bZ/node"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -21,7 +21,7 @@ var (
 
 var serverCommand = cobra.Command{
 	Use:   "server",
-	Short: "Run V2bX server",
+	Short: "Chạy server V2bZ",
 	Run:   serverHandle,
 	Args:  cobra.NoArgs,
 }
@@ -29,10 +29,10 @@ var serverCommand = cobra.Command{
 func init() {
 	serverCommand.PersistentFlags().
 		StringVarP(&config, "config", "c",
-			"/etc/V2bX/config.json", "config file path")
+			"/etc/V2bZ/config.json", "đường dẫn file cấu hình")
 	serverCommand.PersistentFlags().
 		BoolVarP(&watch, "watch", "w",
-			true, "watch file path change")
+			true, "theo dõi thay đổi file cấu hình")
 	command.AddCommand(&serverCommand)
 }
 
@@ -41,7 +41,7 @@ func serverHandle(_ *cobra.Command, _ []string) {
 	c := conf.New()
 	err := c.LoadFromPath(config)
 	if err != nil {
-		log.WithField("err", err).Error("Load config file failed")
+		log.WithField("err", err).Error("Tải file cấu hình thất bại")
 		return
 	}
 	switch c.LogConfig.Level {
@@ -57,31 +57,31 @@ func serverHandle(_ *cobra.Command, _ []string) {
 	if c.LogConfig.Output != "" {
 		f, err := os.OpenFile(c.LogConfig.Output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
-			log.WithField("err", err).Error("Open log file failed, using stdout instead")
+			log.WithField("err", err).Error("Mở file log thất bại, dùng stdout thay thế")
 		}
 		log.SetOutput(f)
 	}
 	limiter.Init()
-	log.Info("Start V2bX...")
+	log.Info("Đang khởi động V2bZ...")
 	vc, err := vCore.NewCore(c.CoresConfig)
 	if err != nil {
-		log.WithField("err", err).Error("new core failed")
+		log.WithField("err", err).Error("Tạo core thất bại")
 		return
 	}
 	err = vc.Start()
 	if err != nil {
-		log.WithField("err", err).Error("Start core failed")
+		log.WithField("err", err).Error("Khởi động core thất bại")
 		return
 	}
 	defer vc.Close()
-	log.Info("Core ", vc.Type(), " started")
+	log.Info("Core ", vc.Type(), " đã khởi động")
 	nodes := node.New()
 	err = nodes.Start(c.NodeConfig, vc)
 	if err != nil {
-		log.WithField("err", err).Error("Run nodes failed")
+		log.WithField("err", err).Error("Chạy node thất bại")
 		return
 	}
-	log.Info("Nodes started")
+	log.Info("Nodes đã khởi động")
 	xdns := os.Getenv("XRAY_DNS_PATH")
 	sdns := os.Getenv("SING_DNS_PATH")
 	if watch {
@@ -89,30 +89,30 @@ func serverHandle(_ *cobra.Command, _ []string) {
 			nodes.Close()
 			err = vc.Close()
 			if err != nil {
-				log.WithField("err", err).Error("Restart node failed")
+				log.WithField("err", err).Error("Khởi động lại node thất bại")
 				return
 			}
 			vc, err = vCore.NewCore(c.CoresConfig)
 			if err != nil {
-				log.WithField("err", err).Error("New core failed")
+				log.WithField("err", err).Error("Tạo core mới thất bại")
 				return
 			}
 			err = vc.Start()
 			if err != nil {
-				log.WithField("err", err).Error("Start core failed")
+				log.WithField("err", err).Error("Khởi động core thất bại")
 				return
 			}
-			log.Info("Core ", vc.Type(), " restarted")
+			log.Info("Core ", vc.Type(), " đã khởi động lại")
 			err = nodes.Start(c.NodeConfig, vc)
 			if err != nil {
-				log.WithField("err", err).Error("Run nodes failed")
+				log.WithField("err", err).Error("Chạy node thất bại")
 				return
 			}
-			log.Info("Nodes restarted")
+			log.Info("Nodes đã khởi động lại")
 			runtime.GC()
 		})
 		if err != nil {
-			log.WithField("err", err).Error("start watch failed")
+			log.WithField("err", err).Error("Bắt đầu theo dõi file thất bại")
 			return
 		}
 	}

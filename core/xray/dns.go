@@ -9,7 +9,7 @@ import (
 
 	"encoding/json"
 
-	"github.com/InazumaV/V2bX/api/panel"
+	"github.com/kutycma/V2bZ/api/panel"
 	log "github.com/sirupsen/logrus"
 	coreConf "github.com/xtls/xray-core/infra/conf"
 )

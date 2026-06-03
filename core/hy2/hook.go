@@ -3,10 +3,10 @@ package hy2
 import (
 	"sync"
 
-	"github.com/InazumaV/V2bX/common/counter"
-	"github.com/InazumaV/V2bX/common/format"
-	"github.com/InazumaV/V2bX/limiter"
 	"github.com/apernet/hysteria/core/v2/server"
+	"github.com/kutycma/V2bZ/common/counter"
+	"github.com/kutycma/V2bZ/common/format"
+	"github.com/kutycma/V2bZ/limiter"
 	"go.uber.org/zap"
 )
 

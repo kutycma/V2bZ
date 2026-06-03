@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/InazumaV/V2bX/api/panel"
-	"github.com/InazumaV/V2bX/conf"
+	"github.com/kutycma/V2bZ/api/panel"
+	"github.com/kutycma/V2bZ/conf"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/outbound"

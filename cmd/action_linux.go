@@ -4,31 +4,31 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/InazumaV/V2bX/common/exec"
+	"github.com/kutycma/V2bZ/common/exec"
 	"github.com/spf13/cobra"
 )
 
 var (
 	startCommand = cobra.Command{
 		Use:   "start",
-		Short: "Start V2bX service",
+		Short: "Khởi động dịch vụ V2bZ",
 		Run:   startHandle,
 	}
 	stopCommand = cobra.Command{
 		Use:   "stop",
-		Short: "Stop V2bX service",
+		Short: "Dừng dịch vụ V2bZ",
 		Run:   stopHandle,
 	}
 	restartCommand = cobra.Command{
 		Use:   "restart",
-		Short: "Restart V2bX service",
+		Short: "Khởi động lại dịch vụ V2bZ",
 		Run:   restartHandle,
 	}
 	logCommand = cobra.Command{
 		Use:   "log",
-		Short: "Output V2bX log",
+		Short: "Xem log V2bZ",
 		Run: func(_ *cobra.Command, _ []string) {
-			exec.RunCommandStd("journalctl", "-u", "V2bX.service", "-e", "--no-pager", "-f")
+			exec.RunCommandStd("journalctl", "-u", "V2bZ.service", "-e", "--no-pager", "-f")
 		},
 	}
 )
@@ -43,69 +43,69 @@ func init() {
 func startHandle(_ *cobra.Command, _ []string) {
 	r, err := checkRunning()
 	if err != nil {
-		fmt.Println(Err("check status error: ", err))
-		fmt.Println(Err("V2bX启动失败"))
+		fmt.Println(Err("lỗi kiểm tra trạng thái: ", err))
+		fmt.Println(Err("V2bZ khởi động thất bại"))
 		return
 	}
 	if r {
-		fmt.Println(Ok("V2bX已运行，无需再次启动，如需重启请选择重启"))
+		fmt.Println(Ok("V2bZ đang chạy, không cần khởi động lại. Nếu cần, hãy chọn restart"))
 	}
-	_, err = exec.RunCommandByShell("systemctl start V2bX.service")
+	_, err = exec.RunCommandByShell("systemctl start V2bZ.service")
 	if err != nil {
-		fmt.Println(Err("exec start cmd error: ", err))
-		fmt.Println(Err("V2bX启动失败"))
+		fmt.Println(Err("lỗi chạy lệnh khởi động: ", err))
+		fmt.Println(Err("V2bZ khởi động thất bại"))
 		return
 	}
 	time.Sleep(time.Second * 3)
 	r, err = checkRunning()
 	if err != nil {
-		fmt.Println(Err("check status error: ", err))
-		fmt.Println(Err("V2bX启动失败"))
+		fmt.Println(Err("lỗi kiểm tra trạng thái: ", err))
+		fmt.Println(Err("V2bZ khởi động thất bại"))
 	}
 	if !r {
-		fmt.Println(Err("V2bX可能启动失败，请稍后使用 V2bX log 查看日志信息"))
+		fmt.Println(Err("V2bZ có thể khởi động thất bại. Vui lòng dùng V2bZ log để xem log sau"))
 		return
 	}
-	fmt.Println(Ok("V2bX 启动成功，请使用 V2bX log 查看运行日志"))
+	fmt.Println(Ok("V2bZ khởi động thành công. Dùng V2bZ log để xem log chạy"))
 }
 
 func stopHandle(_ *cobra.Command, _ []string) {
-	_, err := exec.RunCommandByShell("systemctl stop V2bX.service")
+	_, err := exec.RunCommandByShell("systemctl stop V2bZ.service")
 	if err != nil {
-		fmt.Println(Err("exec stop cmd error: ", err))
-		fmt.Println(Err("V2bX停止失败"))
+		fmt.Println(Err("lỗi chạy lệnh dừng: ", err))
+		fmt.Println(Err("Dừng V2bZ thất bại"))
 		return
 	}
 	time.Sleep(2 * time.Second)
 	r, err := checkRunning()
 	if err != nil {
 		fmt.Println(Err("check status error:", err))
-		fmt.Println(Err("V2bX停止失败"))
+		fmt.Println(Err("Dừng V2bZ thất bại"))
 		return
 	}
 	if r {
-		fmt.Println(Err("V2bX停止失败，可能是因为停止时间超过了两秒，请稍后查看日志信息"))
+		fmt.Println(Err("Dừng V2bZ thất bại, có thể do quá thời gian 2 giây. Vui lòng xem log sau"))
 		return
 	}
-	fmt.Println(Ok("V2bX 停止成功"))
+	fmt.Println(Ok("V2bZ dừng thành công"))
 }
 
 func restartHandle(_ *cobra.Command, _ []string) {
-	_, err := exec.RunCommandByShell("systemctl restart V2bX.service")
+	_, err := exec.RunCommandByShell("systemctl restart V2bZ.service")
 	if err != nil {
-		fmt.Println(Err("exec restart cmd error: ", err))
-		fmt.Println(Err("V2bX重启失败"))
+		fmt.Println(Err("lỗi chạy lệnh khởi động lại: ", err))
+		fmt.Println(Err("V2bZ khởi động lại thất bại"))
 		return
 	}
 	r, err := checkRunning()
 	if err != nil {
-		fmt.Println(Err("check status error: ", err))
-		fmt.Println(Err("V2bX重启失败"))
+		fmt.Println(Err("lỗi kiểm tra trạng thái: ", err))
+		fmt.Println(Err("V2bZ khởi động lại thất bại"))
 		return
 	}
 	if !r {
-		fmt.Println(Err("V2bX可能启动失败，请稍后使用 V2bX log 查看日志信息"))
+		fmt.Println(Err("V2bZ có thể khởi động thất bại. Vui lòng dùng V2bZ log để xem log sau"))
 		return
 	}
-	fmt.Println(Ok("V2bX重启成功"))
+	fmt.Println(Ok("V2bZ khởi động lại thành công"))
 }

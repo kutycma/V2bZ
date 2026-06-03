@@ -4,20 +4,20 @@ import (
 	"net"
 	"sync"
 
-	"github.com/InazumaV/V2bX/api/panel"
-	"github.com/InazumaV/V2bX/common/counter"
-	vCore "github.com/InazumaV/V2bX/core"
 	"github.com/apernet/hysteria/core/v2/server"
+	"github.com/kutycma/V2bZ/api/panel"
+	"github.com/kutycma/V2bZ/common/counter"
+	vCore "github.com/kutycma/V2bZ/core"
 )
 
-var _ server.Authenticator = &V2bX{}
+var _ server.Authenticator = &V2bZ{}
 
-type V2bX struct {
+type V2bZ struct {
 	usersMap map[string]int
 	mutex    sync.RWMutex
 }
 
-func (v *V2bX) Authenticate(addr net.Addr, auth string, tx uint64) (ok bool, id string) {
+func (v *V2bZ) Authenticate(addr net.Addr, auth string, tx uint64) (ok bool, id string) {
 	v.mutex.RLock()
 	defer v.mutex.RUnlock()
 	if _, exists := v.usersMap[auth]; exists {

@@ -2,4 +2,4 @@
 
 package imports
 
-import _ "github.com/InazumaV/V2bX/core/xray"
+import _ "github.com/kutycma/V2bZ/core/xray"

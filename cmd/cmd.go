@@ -3,12 +3,12 @@ package cmd
 import (
 	log "github.com/sirupsen/logrus"
 
-	_ "github.com/InazumaV/V2bX/core/imports"
+	_ "github.com/kutycma/V2bZ/core/imports"
 	"github.com/spf13/cobra"
 )
 
 var command = &cobra.Command{
-	Use: "V2bX",
+	Use: "V2bZ",
 }
 
 func Run() {

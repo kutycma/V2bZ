@@ -3,9 +3,9 @@ package hy2
 import (
 	"strings"
 
-	"github.com/InazumaV/V2bX/api/panel"
-	"github.com/InazumaV/V2bX/conf"
 	"github.com/apernet/hysteria/core/v2/server"
+	"github.com/kutycma/V2bZ/api/panel"
+	"github.com/kutycma/V2bZ/conf"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
