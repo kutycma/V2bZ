@@ -2,6 +2,15 @@ name: Build and Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag/version release muốn upload asset, ví dụ v1.2.3. Để trống nếu chỉ build artifact."
+        required: false
+        type: string
+      release_name:
+        description: "Tên release khi workflow cần tự tạo release mới. Để trống sẽ dùng release_tag."
+        required: false
+        type: string
   push:
     branches:
       - master
@@ -20,6 +29,9 @@ on:
       - ".github/workflows/release.yml"
   release:
     types: [published]
+
+permissions:
+  contents: write
 
 jobs:
 
@@ -117,22 +129,26 @@ jobs:
       - name: Get release version
         if: ${{ github.event_name == 'release' }}
         run: |
-          echo "version=$(echo $GITHUB_REF | cut -d / -f 3)" >> $GITHUB_ENV
+          echo "version=${{ github.event.release.tag_name }}" >> $GITHUB_ENV
+      - name: Get workflow dispatch release version
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag != '' }}
+        run: |
+          echo "version=${{ inputs.release_tag }}" >> $GITHUB_ENV
       - name: Get other version
-        if: ${{ github.event_name != 'release' }}
+        if: ${{ github.event_name != 'release' && (github.event_name != 'workflow_dispatch' || inputs.release_tag == '') }}
         run: |
           echo "version=${{ github.sha }}" >> $GITHUB_ENV
       - name: Build V2bZ
         run: |
           echo "version: $version"
           mkdir -p build_assets
-          GOEXPERIMENT=jsonv2 go build -v -o build_assets/V2bZ -tags "sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor" -trimpath -ldflags "-X 'github.com/kutycma/V2bZ/cmd.version=$version' -s -w -buildid="
+          go build -v -o build_assets/V2bZ -tags "sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor" -trimpath -ldflags "-X 'github.com/kutycma/V2bZ/cmd.version=$version' -s -w -buildid="
 
       - name: Build Mips softfloat V2bZ
         if: matrix.goarch == 'mips' || matrix.goarch == 'mipsle'
         run: |
           echo "version: $version"
-          GOEXPERIMENT=jsonv2 GOMIPS=softfloat go build -v -o build_assets/V2bZ_softfloat -tags "sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor" -trimpath -ldflags "-X 'github.com/kutycma/V2bZ/cmd.version=$version' -s -w -buildid="
+          GOMIPS=softfloat go build -v -o build_assets/V2bZ_softfloat -tags "sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor" -trimpath -ldflags "-X 'github.com/kutycma/V2bZ/cmd.version=$version' -s -w -buildid="
       - name: Rename Windows V2bZ
         if: matrix.goos == 'windows'
         run: |
@@ -174,10 +190,16 @@ jobs:
           path: |
             ./V2bZ-${{ steps.get_filename.outputs.ASSET_NAME }}/*
       - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
-        if: github.event_name == 'release'
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ./V2bZ-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
-          tag: ${{ github.ref }}
-          file_glob: true
+        if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.release_tag }}
+          RELEASE_NAME: ${{ inputs.release_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="${RELEASE_NAME:-$RELEASE_TAG}"
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --title "$title" --notes "Automated release $RELEASE_TAG" || gh release view "$RELEASE_TAG" >/dev/null
+          fi
+          gh release upload "$RELEASE_TAG" ./V2bZ-${{ steps.get_filename.outputs.ASSET_NAME }}.zip* --clobber
