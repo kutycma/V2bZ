@@ -1,11 +1,9 @@
 package panel
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
-
-	"encoding/json/jsontext"
-	"encoding/json/v2"
 
 	"github.com/vmihailenco/msgpack/v5"
 )
@@ -30,6 +28,16 @@ type AliveMap struct {
 	Alive map[int]int `json:"alive"`
 }
 
+type CertReport struct {
+	Status   string `json:"status"`
+	Target   string `json:"target"`
+	Mode     string `json:"mode"`
+	Source   string `json:"source"`
+	SHA256   string `json:"sha256"`
+	NotAfter int64  `json:"not_after"`
+	Error    string `json:"error,omitempty"`
+}
+
 // GetUserList will pull user from v2board
 func (c *Client) GetUserList() ([]UserInfo, error) {
 	const path = "/api/v3/server/UniProxy/user"
@@ -38,6 +46,9 @@ func (c *Client) GetUserList() ([]UserInfo, error) {
 		SetHeader("X-Response-Format", "msgpack").
 		SetDoNotParseResponse(true).
 		Get(path)
+	if err != nil {
+		return nil, c.checkResponse(r, path, err)
+	}
 	if r == nil || r.RawResponse == nil {
 		return nil, fmt.Errorf("received nil response or raw response")
 	}
@@ -57,33 +68,9 @@ func (c *Client) GetUserList() ([]UserInfo, error) {
 			return nil, fmt.Errorf("decode user list error: %w", err)
 		}
 	} else {
-		dec := jsontext.NewDecoder(r.RawResponse.Body)
-		for {
-			tok, err := dec.ReadToken()
-			if err != nil {
-				return nil, fmt.Errorf("decode user list error: %w", err)
-			}
-			if tok.Kind() == '"' && tok.String() == "users" {
-				break
-			}
-		}
-		tok, err := dec.ReadToken()
-		if err != nil {
+		decoder := json.NewDecoder(r.RawResponse.Body)
+		if err := decoder.Decode(userlist); err != nil {
 			return nil, fmt.Errorf("decode user list error: %w", err)
-		}
-		if tok.Kind() != '[' {
-			return nil, fmt.Errorf(`decode user list error: expected "users" array`)
-		}
-		for dec.PeekKind() != ']' {
-			val, err := dec.ReadValue()
-			if err != nil {
-				return nil, fmt.Errorf("decode user list error: read user object: %w", err)
-			}
-			var u UserInfo
-			if err := json.Unmarshal(val, &u); err != nil {
-				return nil, fmt.Errorf("decode user list error: unmarshal user error: %w", err)
-			}
-			userlist.Users = append(userlist.Users, u)
 		}
 	}
 	c.userEtag = r.Header().Get("ETag")
@@ -97,12 +84,7 @@ func (c *Client) GetUserAlive() (map[int]int, error) {
 	r, err := c.client.R().
 		ForceContentType("application/json").
 		Get(path)
-	if err != nil || r.StatusCode() >= 399 {
-		c.AliveMap.Alive = make(map[int]int)
-		return c.AliveMap.Alive, nil
-	}
-	if r == nil || r.RawResponse == nil {
-		fmt.Printf("received nil response or raw response")
+	if err != nil || r == nil || r.RawResponse == nil || r.StatusCode() >= 399 {
 		c.AliveMap.Alive = make(map[int]int)
 		return c.AliveMap.Alive, nil
 	}
@@ -125,6 +107,10 @@ type UserTraffic struct {
 func (c *Client) ReportUserTraffic(userTraffic []UserTraffic) error {
 	data := make(map[int][]int64, len(userTraffic))
 	for i := range userTraffic {
+		if current, ok := data[userTraffic[i].UID]; ok {
+			data[userTraffic[i].UID] = []int64{current[0] + userTraffic[i].Upload, current[1] + userTraffic[i].Download}
+			continue
+		}
 		data[userTraffic[i].UID] = []int64{userTraffic[i].Upload, userTraffic[i].Download}
 	}
 	const path = "/api/v3/server/UniProxy/push"
@@ -152,4 +138,13 @@ func (c *Client) ReportNodeOnlineUsers(data *map[int][]string) error {
 	}
 
 	return nil
+}
+
+func (c *Client) ReportCertStatus(data *CertReport) error {
+	const path = "/api/v3/server/UniProxy/cert/report"
+	r, err := c.client.R().
+		SetBody(data).
+		ForceContentType("application/json").
+		Post(path)
+	return c.checkResponse(r, path, err)
 }

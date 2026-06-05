@@ -1,15 +1,15 @@
 package xray
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
-
-	"encoding/json"
 
 	"github.com/kutycma/V2bZ/api/panel"
 	"github.com/kutycma/V2bZ/conf"
@@ -42,6 +42,11 @@ func buildInbound(option *conf.Options, nodeInfo *panel.NodeInfo, tag string) (*
 	}
 	if err != nil {
 		return nil, err
+	}
+	network = normalizeTransportNetwork(network)
+	if in.StreamSetting == nil {
+		t := coreConf.TransportProtocol(network)
+		in.StreamSetting = &coreConf.StreamConfig{Network: &t}
 	}
 	// Set network protocol
 	// Set server port
@@ -100,6 +105,9 @@ func buildInbound(option *conf.Options, nodeInfo *panel.NodeInfo, tag string) (*
 		case "none", "":
 			break // disable
 		default:
+			if in.StreamSetting == nil {
+				in.StreamSetting = &coreConf.StreamConfig{}
+			}
 			in.StreamSetting.Security = "tls"
 			in.StreamSetting.TLSSettings = &coreConf.TLSConfig{
 				Certs: []*coreConf.TLSCertConfig{
@@ -114,6 +122,9 @@ func buildInbound(option *conf.Options, nodeInfo *panel.NodeInfo, tag string) (*
 		}
 	case panel.Reality:
 		// Reality
+		if in.StreamSetting == nil {
+			in.StreamSetting = &coreConf.StreamConfig{}
+		}
 		in.StreamSetting.Security = "reality"
 		v := nodeInfo.VAllss
 		dest := v.TlsSettings.Dest
@@ -153,6 +164,8 @@ func buildInbound(option *conf.Options, nodeInfo *panel.NodeInfo, tag string) (*
 
 func buildV2ray(config *conf.Options, nodeInfo *panel.NodeInfo, inbound *coreConf.InboundDetourConfig) error {
 	v := nodeInfo.VAllss
+	network := normalizeTransportNetwork(v.Network)
+	v.Network = network
 	if nodeInfo.Type == "vless" {
 		//Set vless
 		inbound.Protocol = "vless"
@@ -209,40 +222,44 @@ func buildV2ray(config *conf.Options, nodeInfo *panel.NodeInfo, inbound *coreCon
 		}
 		inbound.Settings = (*json.RawMessage)(&s)
 	}
-	if len(v.NetworkSettings) == 0 {
+	t := coreConf.TransportProtocol(network)
+	inbound.StreamSetting = &coreConf.StreamConfig{Network: &t}
+	settings := normalizeNetworkSettings(v.NetworkSettings)
+	switch network {
+	case "tcp", "ws", "grpc", "httpupgrade", "splithttp", "xhttp":
+		// supported below
+	default:
+		return fmt.Errorf("network %q chưa được V2bZ xray hỗ trợ cho %s; hãy dùng tcp/ws/grpc/httpupgrade/xhttp", network, nodeInfo.Type)
+	}
+	if len(settings) == 0 {
 		return nil
 	}
-
-	t := coreConf.TransportProtocol(v.Network)
-	inbound.StreamSetting = &coreConf.StreamConfig{Network: &t}
-	switch v.Network {
+	switch network {
 	case "tcp":
-		err := json.Unmarshal(v.NetworkSettings, &inbound.StreamSetting.TCPSettings)
+		err := json.Unmarshal(settings, &inbound.StreamSetting.TCPSettings)
 		if err != nil {
 			return fmt.Errorf("unmarshal tcp settings error: %s", err)
 		}
 	case "ws":
-		err := json.Unmarshal(v.NetworkSettings, &inbound.StreamSetting.WSSettings)
+		err := json.Unmarshal(settings, &inbound.StreamSetting.WSSettings)
 		if err != nil {
 			return fmt.Errorf("unmarshal ws settings error: %s", err)
 		}
 	case "grpc":
-		err := json.Unmarshal(v.NetworkSettings, &inbound.StreamSetting.GRPCSettings)
+		err := json.Unmarshal(settings, &inbound.StreamSetting.GRPCSettings)
 		if err != nil {
 			return fmt.Errorf("unmarshal grpc settings error: %s", err)
 		}
 	case "httpupgrade":
-		err := json.Unmarshal(v.NetworkSettings, &inbound.StreamSetting.HTTPUPGRADESettings)
+		err := json.Unmarshal(settings, &inbound.StreamSetting.HTTPUPGRADESettings)
 		if err != nil {
 			return fmt.Errorf("unmarshal httpupgrade settings error: %s", err)
 		}
 	case "splithttp", "xhttp":
-		err := json.Unmarshal(v.NetworkSettings, &inbound.StreamSetting.SplitHTTPSettings)
+		err := json.Unmarshal(settings, &inbound.StreamSetting.SplitHTTPSettings)
 		if err != nil {
 			return fmt.Errorf("unmarshal xhttp settings error: %s", err)
 		}
-	default:
-		return errors.New("the network type is not vail")
 	}
 	return nil
 }
@@ -267,32 +284,69 @@ func buildTrojan(config *conf.Options, nodeInfo *panel.NodeInfo, inbound *coreCo
 		s := []byte("{}")
 		inbound.Settings = (*json.RawMessage)(&s)
 	}
-	network := v.Network
-	if network == "" {
-		network = "tcp"
+	network, err := normalizeTrojanNetwork(v.Network)
+	if err != nil {
+		return err
 	}
+	v.Network = network
 	t := coreConf.TransportProtocol(network)
 	inbound.StreamSetting = &coreConf.StreamConfig{Network: &t}
+	settings := normalizeNetworkSettings(v.NetworkSettings)
+	if len(settings) == 0 {
+		return nil
+	}
 	switch network {
 	case "tcp":
-		err := json.Unmarshal(v.NetworkSettings, &inbound.StreamSetting.TCPSettings)
+		err := json.Unmarshal(settings, &inbound.StreamSetting.TCPSettings)
 		if err != nil {
 			return fmt.Errorf("unmarshal tcp settings error: %s", err)
 		}
 	case "ws":
-		err := json.Unmarshal(v.NetworkSettings, &inbound.StreamSetting.WSSettings)
+		err := json.Unmarshal(settings, &inbound.StreamSetting.WSSettings)
 		if err != nil {
 			return fmt.Errorf("unmarshal ws settings error: %s", err)
 		}
 	case "grpc":
-		err := json.Unmarshal(v.NetworkSettings, &inbound.StreamSetting.GRPCSettings)
+		err := json.Unmarshal(settings, &inbound.StreamSetting.GRPCSettings)
 		if err != nil {
 			return fmt.Errorf("unmarshal grpc settings error: %s", err)
 		}
 	default:
-		return errors.New("the network type is not vail")
+		return fmt.Errorf("network %q chưa được V2bZ xray hỗ trợ cho trojan; hãy dùng tcp/ws/grpc", network)
 	}
 	return nil
+}
+
+func normalizeTransportNetwork(network string) string {
+	switch strings.ToLower(strings.TrimSpace(network)) {
+	case "":
+		return "tcp"
+	case "http":
+		return "httpupgrade"
+	default:
+		return strings.ToLower(strings.TrimSpace(network))
+	}
+}
+
+func normalizeTrojanNetwork(network string) (string, error) {
+	network = normalizeTransportNetwork(network)
+	switch network {
+	case "tcp", "ws", "grpc":
+		return network, nil
+	default:
+		return "", fmt.Errorf("network %q chưa được V2bZ xray hỗ trợ cho trojan; hãy dùng tcp/ws/grpc", network)
+	}
+}
+
+func normalizeNetworkSettings(raw json.RawMessage) json.RawMessage {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+	if bytes.Equal(trimmed, []byte("[]")) {
+		return json.RawMessage(`{}`)
+	}
+	return trimmed
 }
 
 func buildShadowsocks(config *conf.Options, nodeInfo *panel.NodeInfo, inbound *coreConf.InboundDetourConfig) error {

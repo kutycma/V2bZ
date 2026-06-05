@@ -1,6 +1,7 @@
 package node
 
 import (
+	"strings"
 	"time"
 
 	"github.com/kutycma/V2bZ/api/panel"
@@ -27,7 +28,11 @@ func (c *Controller) startTasks(node *panel.NodeInfo) {
 	log.WithField("tag", c.tag).Info("Start report node status")
 	_ = c.userReportPeriodic.Start(false)
 	if node.Security == panel.Tls {
-		switch c.CertConfig.CertMode {
+		certMode := ""
+		if c.activeOptions != nil && c.activeOptions.CertConfig != nil {
+			certMode = strings.ToLower(strings.TrimSpace(c.activeOptions.CertConfig.CertMode))
+		}
+		switch certMode {
 		case "none", "", "file", "self":
 		default:
 			c.renewCertPeriodic = &task.Task{
@@ -79,6 +84,8 @@ func (c *Controller) nodeInfoMonitor() (err error) {
 	}
 	if newN != nil {
 		c.info = newN
+		activeOptions := c.optionsForNode(newN)
+		c.activeOptions = activeOptions
 		// nodeInfo changed
 		if newU != nil {
 			c.userList = newU
@@ -120,7 +127,7 @@ func (c *Controller) nodeInfoMonitor() (err error) {
 
 		// check cert
 		if newN.Security == panel.Tls {
-			err = c.requestCert()
+			err = c.requestCertAndReport(false)
 			if err != nil {
 				log.WithFields(log.Fields{
 					"tag": c.tag,
@@ -130,7 +137,7 @@ func (c *Controller) nodeInfoMonitor() (err error) {
 			}
 		}
 		// add new node
-		err = c.server.AddNode(c.tag, newN, c.Options)
+		err = c.server.AddNode(c.tag, newN, activeOptions)
 		if err != nil {
 			log.WithFields(log.Fields{
 				"tag": c.tag,

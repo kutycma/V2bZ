@@ -1,8 +1,9 @@
 package conf
 
 type CertConfig struct {
-	CertMode         string            `json:"CertMode"` // none, file, http, dns
+	CertMode         string            `json:"CertMode"` // none, file, http, dns, auto, self
 	RejectUnknownSni bool              `json:"RejectUnknownSni"`
+	SelfFallback     bool              `json:"SelfFallback"`
 	CertDomain       string            `json:"CertDomain"`
 	CertFile         string            `json:"CertFile"`
 	KeyFile          string            `json:"KeyFile"`

@@ -21,6 +21,7 @@ type Controller struct {
 	userList                  []panel.UserInfo
 	aliveMap                  map[int]int
 	info                      *panel.NodeInfo
+	activeOptions             *conf.Options
 	nodeInfoMonitorPeriodic   *task.Task
 	userReportPeriodic        *task.Task
 	renewCertPeriodic         *task.Task
@@ -64,6 +65,9 @@ func (c *Controller) Start() error {
 	} else {
 		c.tag = c.Options.Name
 	}
+	activeOptions := c.optionsForNode(node)
+	c.info = node
+	c.activeOptions = activeOptions
 
 	// add limiter
 	l := limiter.AddLimiter(c.tag, &c.LimitConfig, c.userList, c.aliveMap)
@@ -73,13 +77,13 @@ func (c *Controller) Start() error {
 	}
 	c.limiter = l
 	if node.Security == panel.Tls {
-		err = c.requestCert()
+		err = c.requestCertAndReport(false)
 		if err != nil {
 			return fmt.Errorf("request cert error: %s", err)
 		}
 	}
 	// Add new tag
-	err = c.server.AddNode(c.tag, node, c.Options)
+	err = c.server.AddNode(c.tag, node, activeOptions)
 	if err != nil {
 		return fmt.Errorf("add new node error: %s", err)
 	}
@@ -92,7 +96,6 @@ func (c *Controller) Start() error {
 		return fmt.Errorf("add users error: %s", err)
 	}
 	log.WithField("tag", c.tag).Infof("Added %d new users", added)
-	c.info = node
 	c.startTasks(node)
 	return nil
 }

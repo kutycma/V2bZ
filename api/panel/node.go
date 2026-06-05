@@ -1,15 +1,18 @@
 package panel
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
-	"encoding/json"
+	"github.com/kutycma/V2bZ/conf"
 )
 
 // Security type
@@ -37,6 +40,10 @@ type NodeInfo struct {
 	Hysteria    *HysteriaNode
 	Hysteria2   *Hysteria2Node
 	Common      *CommonNode
+
+	PanelCertConfig              *conf.CertConfig
+	PanelCertSelfFallbackSet     bool
+	PanelCertRejectUnknownSniSet bool
 }
 
 type CommonNode struct {
@@ -77,13 +84,26 @@ type VAllssNode struct {
 }
 
 type TlsSettings struct {
-	ServerName  string `json:"server_name"`
-	Dest        string `json:"dest"`
-	ServerPort  string `json:"server_port"`
-	ShortId     string `json:"short_id"`
-	PrivateKey  string `json:"private_key"`
-	Mldsa65Seed string `json:"mldsa65Seed"`
-	Xver        uint64 `json:"xver,string"`
+	ServerName       string   `json:"server_name"`
+	ServerNames      []string `json:"server_names"`
+	Dest             string   `json:"dest"`
+	ServerPort       string   `json:"server_port"`
+	ShortId          string   `json:"short_id"`
+	ShortIds         []string `json:"short_ids"`
+	PrivateKey       string   `json:"private_key"`
+	Mldsa65Seed      string   `json:"mldsa65Seed"`
+	Xver             uint64   `json:"xver,string"`
+	CertMode         string   `json:"cert_mode"`
+	CertFile         string   `json:"cert_file"`
+	KeyFile          string   `json:"key_file"`
+	Provider         string   `json:"provider"`
+	DNSEnv           string   `json:"dns_env"`
+	SelfFallback     bool     `json:"self_fallback"`
+	RejectUnknownSni bool     `json:"reject_unknown_sni"`
+
+	HasSelfFallback     bool `json:"-"`
+	HasRejectUnknownSni bool `json:"-"`
+	HasCertFields       bool `json:"-"`
 }
 
 type EncSettings struct {
@@ -108,35 +128,46 @@ type ShadowsocksNode struct {
 
 type TrojanNode struct {
 	CommonNode
-	Network         string          `json:"network"`
-	NetworkSettings json.RawMessage `json:"networkSettings"`
+	Network              string          `json:"network"`
+	NetworkSettings      json.RawMessage `json:"networkSettings"`
+	NetworkSettingsSnake json.RawMessage `json:"network_settings"`
+	TlsSettings          TlsSettings     `json:"tls_settings"`
+	TlsSettingsBack      *TlsSettings    `json:"tlsSettings"`
 }
 
 type TuicNode struct {
 	CommonNode
-	CongestionControl string `json:"congestion_control"`
-	ZeroRTTHandshake  bool   `json:"zero_rtt_handshake"`
+	TlsSettings       TlsSettings  `json:"tls_settings"`
+	TlsSettingsBack   *TlsSettings `json:"tlsSettings"`
+	CongestionControl string       `json:"congestion_control"`
+	ZeroRTTHandshake  bool         `json:"zero_rtt_handshake"`
 }
 
 type AnyTlsNode struct {
 	CommonNode
-	PaddingScheme []string `json:"padding_scheme,omitempty"`
+	TlsSettings     TlsSettings  `json:"tls_settings"`
+	TlsSettingsBack *TlsSettings `json:"tlsSettings"`
+	PaddingScheme   []string     `json:"padding_scheme,omitempty"`
 }
 
 type HysteriaNode struct {
 	CommonNode
-	UpMbps   int    `json:"up_mbps"`
-	DownMbps int    `json:"down_mbps"`
-	Obfs     string `json:"obfs"`
+	TlsSettings     TlsSettings  `json:"tls_settings"`
+	TlsSettingsBack *TlsSettings `json:"tlsSettings"`
+	UpMbps          int          `json:"up_mbps"`
+	DownMbps        int          `json:"down_mbps"`
+	Obfs            string       `json:"obfs"`
 }
 
 type Hysteria2Node struct {
 	CommonNode
-	Ignore_Client_Bandwidth bool   `json:"ignore_client_bandwidth"`
-	UpMbps                  int    `json:"up_mbps"`
-	DownMbps                int    `json:"down_mbps"`
-	ObfsType                string `json:"obfs"`
-	ObfsPassword            string `json:"obfs-password"`
+	TlsSettings             TlsSettings  `json:"tls_settings"`
+	TlsSettingsBack         *TlsSettings `json:"tlsSettings"`
+	Ignore_Client_Bandwidth bool         `json:"ignore_client_bandwidth"`
+	UpMbps                  int          `json:"up_mbps"`
+	DownMbps                int          `json:"down_mbps"`
+	ObfsType                string       `json:"obfs"`
+	ObfsPassword            string       `json:"obfs-password"`
 }
 
 type RawDNS struct {
@@ -156,10 +187,23 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		SetHeader("If-None-Match", c.nodeEtag).
 		ForceContentType("application/json").
 		Get(path)
+	if err != nil {
+		return nil, c.checkResponse(r, path, err)
+	}
+	if r == nil {
+		return nil, fmt.Errorf("received nil response")
+	}
 
 	if r.StatusCode() == 304 {
 		return nil, nil
 	}
+	if err = c.checkResponse(r, path, err); err != nil {
+		return nil, err
+	}
+	if r.RawBody() != nil {
+		defer r.RawBody().Close()
+	}
+
 	hash := sha256.Sum256(r.Body())
 	newBodyHash := hex.EncodeToString(hash[:])
 	if c.responseBodyHash == newBodyHash {
@@ -167,19 +211,6 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 	}
 	c.responseBodyHash = newBodyHash
 	c.nodeEtag = r.Header().Get("ETag")
-	if err = c.checkResponse(r, path, err); err != nil {
-		return nil, err
-	}
-
-	if r != nil {
-		defer func() {
-			if r.RawBody() != nil {
-				r.RawBody().Close()
-			}
-		}()
-	} else {
-		return nil, fmt.Errorf("received nil response")
-	}
 	node = &NodeInfo{
 		Id:   c.NodeId,
 		Type: c.NodeType,
@@ -201,6 +232,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 			rsp.NetworkSettings = rsp.NetworkSettingsBack
 			rsp.NetworkSettingsBack = nil
 		}
+		rsp.NetworkSettings = normalizeRawJSON(rsp.NetworkSettings)
 		if rsp.TlsSettingsBack != nil {
 			rsp.TlsSettings = *rsp.TlsSettingsBack
 			rsp.TlsSettingsBack = nil
@@ -223,6 +255,15 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("decode trojan params error: %s", err)
 		}
+		if len(rsp.NetworkSettings) == 0 && len(rsp.NetworkSettingsSnake) > 0 {
+			rsp.NetworkSettings = rsp.NetworkSettingsSnake
+		}
+		rsp.NetworkSettings = normalizeRawJSON(rsp.NetworkSettings)
+		rsp.NetworkSettingsSnake = nil
+		if rsp.TlsSettingsBack != nil {
+			rsp.TlsSettings = *rsp.TlsSettingsBack
+			rsp.TlsSettingsBack = nil
+		}
 		cm = &rsp.CommonNode
 		node.Trojan = rsp
 		node.Security = Tls
@@ -231,6 +272,10 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		err = json.Unmarshal(r.Body(), rsp)
 		if err != nil {
 			return nil, fmt.Errorf("decode tuic params error: %s", err)
+		}
+		if rsp.TlsSettingsBack != nil {
+			rsp.TlsSettings = *rsp.TlsSettingsBack
+			rsp.TlsSettingsBack = nil
 		}
 		cm = &rsp.CommonNode
 		node.Tuic = rsp
@@ -241,6 +286,10 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("decode anytls params error: %s", err)
 		}
+		if rsp.TlsSettingsBack != nil {
+			rsp.TlsSettings = *rsp.TlsSettingsBack
+			rsp.TlsSettingsBack = nil
+		}
 		cm = &rsp.CommonNode
 		node.AnyTls = rsp
 		node.Security = Tls
@@ -249,6 +298,10 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		err = json.Unmarshal(r.Body(), rsp)
 		if err != nil {
 			return nil, fmt.Errorf("decode hysteria params error: %s", err)
+		}
+		if rsp.TlsSettingsBack != nil {
+			rsp.TlsSettings = *rsp.TlsSettingsBack
+			rsp.TlsSettingsBack = nil
 		}
 		cm = &rsp.CommonNode
 		node.Hysteria = rsp
@@ -259,24 +312,23 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("decode hysteria2 params error: %s", err)
 		}
+		if rsp.TlsSettingsBack != nil {
+			rsp.TlsSettings = *rsp.TlsSettingsBack
+			rsp.TlsSettingsBack = nil
+		}
 		cm = &rsp.CommonNode
 		node.Hysteria2 = rsp
 		node.Security = Tls
 	}
+	if cm == nil {
+		return nil, fmt.Errorf("UniProxy trả về node_type chưa được V2bZ hỗ trợ: %s", c.NodeType)
+	}
 
 	// parse rules and dns
 	for i := range cm.Routes {
-		var matchs []string
-		if _, ok := cm.Routes[i].Match.(string); ok {
-			matchs = strings.Split(cm.Routes[i].Match.(string), ",")
-		} else if _, ok = cm.Routes[i].Match.([]string); ok {
-			matchs = cm.Routes[i].Match.([]string)
-		} else {
-			temp := cm.Routes[i].Match.([]interface{})
-			matchs = make([]string, len(temp))
-			for i := range temp {
-				matchs[i] = temp[i].(string)
-			}
+		matchs := routeMatchesToStrings(cm.Routes[i].Match)
+		if len(matchs) == 0 {
+			continue
 		}
 		switch cm.Routes[i].Action {
 		case "block":
@@ -305,10 +357,15 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 	}
 
 	// set interval
-	node.PushInterval = intervalToTime(cm.BaseConfig.PushInterval)
-	node.PullInterval = intervalToTime(cm.BaseConfig.PullInterval)
+	node.PushInterval = time.Minute
+	node.PullInterval = time.Minute
+	if cm.BaseConfig != nil {
+		node.PushInterval = intervalToTime(cm.BaseConfig.PushInterval)
+		node.PullInterval = intervalToTime(cm.BaseConfig.PullInterval)
+	}
 
 	node.Common = cm
+	node.PanelCertConfig, node.PanelCertSelfFallbackSet, node.PanelCertRejectUnknownSniSet = buildPanelCertConfig(c.NodeId, node, cm)
 	// clear
 	cm.Routes = nil
 	cm.BaseConfig = nil
@@ -317,6 +374,9 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 }
 
 func intervalToTime(i interface{}) time.Duration {
+	if i == nil {
+		return time.Minute
+	}
 	switch reflect.TypeOf(i).Kind() {
 	case reflect.Int:
 		return time.Duration(i.(int)) * time.Second
@@ -327,5 +387,357 @@ func intervalToTime(i interface{}) time.Duration {
 		return time.Duration(i.(float64)) * time.Second
 	default:
 		return time.Duration(reflect.ValueOf(i).Int()) * time.Second
+	}
+}
+
+func (t *TlsSettings) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || bytes.Equal(trimmed, []byte("[]")) {
+		*t = TlsSettings{}
+		return nil
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(trimmed, &raw); err != nil {
+		return err
+	}
+
+	*t = TlsSettings{
+		ServerName:       mapString(raw, "server_name", "serverName"),
+		ServerNames:      mapStringSlice(raw, "server_names", "serverNames"),
+		Dest:             mapString(raw, "dest"),
+		ServerPort:       mapString(raw, "server_port", "serverPort"),
+		ShortId:          mapString(raw, "short_id", "shortId"),
+		ShortIds:         mapStringSlice(raw, "short_ids", "shortIds"),
+		PrivateKey:       mapString(raw, "private_key", "privateKey"),
+		Mldsa65Seed:      mapString(raw, "mldsa65Seed", "mldsa65_seed"),
+		Xver:             mapUint64(raw, "xver"),
+		CertMode:         mapString(raw, "cert_mode", "certMode", "CertMode"),
+		CertFile:         mapString(raw, "cert_file", "certFile", "CertFile"),
+		KeyFile:          mapString(raw, "key_file", "keyFile", "KeyFile"),
+		Provider:         mapString(raw, "provider", "Provider"),
+		DNSEnv:           mapDNSEnv(raw, "dns_env", "dnsEnv", "DNSEnv"),
+		SelfFallback:     mapBool(raw, "self_fallback", "selfFallback", "SelfFallback"),
+		RejectUnknownSni: mapBool(raw, "reject_unknown_sni", "rejectUnknownSni", "RejectUnknownSni"),
+	}
+	t.HasSelfFallback = mapHas(raw, "self_fallback", "selfFallback", "SelfFallback")
+	t.HasRejectUnknownSni = mapHas(raw, "reject_unknown_sni", "rejectUnknownSni", "RejectUnknownSni")
+	t.HasCertFields = mapHas(raw,
+		"cert_mode", "certMode", "CertMode",
+		"cert_file", "certFile", "CertFile",
+		"key_file", "keyFile", "KeyFile",
+		"provider", "Provider",
+		"dns_env", "dnsEnv", "DNSEnv",
+		"self_fallback", "selfFallback", "SelfFallback",
+		"reject_unknown_sni", "rejectUnknownSni", "RejectUnknownSni",
+	)
+	return nil
+}
+
+func mapHas(raw map[string]interface{}, keys ...string) bool {
+	for _, key := range keys {
+		if _, ok := raw[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func mapValue(raw map[string]interface{}, keys ...string) interface{} {
+	for _, key := range keys {
+		if value, ok := raw[key]; ok {
+			return value
+		}
+	}
+	return nil
+}
+
+func mapString(raw map[string]interface{}, keys ...string) string {
+	value := mapValue(raw, keys...)
+	switch v := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return strings.TrimSpace(v)
+	case bool:
+		if v {
+			return "1"
+		}
+		return "0"
+	case float64:
+		if v == float64(int64(v)) {
+			return strconv.FormatInt(int64(v), 10)
+		}
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	default:
+		data, err := json.Marshal(v)
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(data))
+	}
+}
+
+func mapStringSlice(raw map[string]interface{}, keys ...string) []string {
+	value := mapValue(raw, keys...)
+	switch v := value.(type) {
+	case nil:
+		return nil
+	case []interface{}:
+		items := make([]string, 0, len(v))
+		for _, item := range v {
+			text := strings.TrimSpace(mapAnyString(item))
+			if text != "" {
+				items = append(items, text)
+			}
+		}
+		return items
+	case []string:
+		return v
+	case string:
+		text := strings.TrimSpace(v)
+		if text == "" {
+			return nil
+		}
+		if strings.HasPrefix(text, "[") {
+			var decoded []interface{}
+			if err := json.Unmarshal([]byte(text), &decoded); err == nil {
+				return mapStringSlice(map[string]interface{}{"value": decoded}, "value")
+			}
+		}
+		return []string{text}
+	default:
+		text := strings.TrimSpace(mapAnyString(v))
+		if text == "" {
+			return nil
+		}
+		return []string{text}
+	}
+}
+
+func mapAnyString(value interface{}) string {
+	switch v := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return v
+	case bool:
+		if v {
+			return "1"
+		}
+		return "0"
+	case float64:
+		if v == float64(int64(v)) {
+			return strconv.FormatInt(int64(v), 10)
+		}
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	default:
+		data, _ := json.Marshal(v)
+		return string(data)
+	}
+}
+
+func mapBool(raw map[string]interface{}, keys ...string) bool {
+	value := mapValue(raw, keys...)
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "1", "true", "yes", "y", "on":
+			return true
+		default:
+			return false
+		}
+	case float64:
+		return v != 0
+	default:
+		return false
+	}
+}
+
+func mapUint64(raw map[string]interface{}, keys ...string) uint64 {
+	value := mapValue(raw, keys...)
+	switch v := value.(type) {
+	case float64:
+		if v > 0 {
+			return uint64(v)
+		}
+	case string:
+		parsed, _ := strconv.ParseUint(strings.TrimSpace(v), 10, 64)
+		return parsed
+	}
+	return 0
+}
+
+func mapDNSEnv(raw map[string]interface{}, keys ...string) string {
+	value := mapValue(raw, keys...)
+	if value == nil {
+		return ""
+	}
+	if env, ok := value.(map[string]interface{}); ok {
+		items := make([]string, 0, len(env))
+		for k, v := range env {
+			key := strings.TrimSpace(k)
+			if key != "" {
+				items = append(items, key+"="+mapAnyString(v))
+			}
+		}
+		return strings.Join(items, ",")
+	}
+	return mapString(map[string]interface{}{"value": value}, "value")
+}
+
+func (t TlsSettings) EffectiveServerNames() []string {
+	if len(t.ServerNames) > 0 {
+		return t.ServerNames
+	}
+	if t.ServerName == "" {
+		return nil
+	}
+	return []string{t.ServerName}
+}
+
+func (t TlsSettings) PrimaryServerName() string {
+	serverNames := t.EffectiveServerNames()
+	if len(serverNames) == 0 {
+		return ""
+	}
+	return serverNames[0]
+}
+
+func nodeTlsSettings(node *NodeInfo) TlsSettings {
+	if node == nil {
+		return TlsSettings{}
+	}
+	switch node.Type {
+	case "vmess", "vless":
+		if node.VAllss != nil {
+			return node.VAllss.TlsSettings
+		}
+	case "trojan":
+		if node.Trojan != nil {
+			return node.Trojan.TlsSettings
+		}
+	case "tuic":
+		if node.Tuic != nil {
+			return node.Tuic.TlsSettings
+		}
+	case "anytls":
+		if node.AnyTls != nil {
+			return node.AnyTls.TlsSettings
+		}
+	case "hysteria":
+		if node.Hysteria != nil {
+			return node.Hysteria.TlsSettings
+		}
+	case "hysteria2":
+		if node.Hysteria2 != nil {
+			return node.Hysteria2.TlsSettings
+		}
+	}
+	return TlsSettings{}
+}
+
+func buildPanelCertConfig(nodeID int, node *NodeInfo, cm *CommonNode) (*conf.CertConfig, bool, bool) {
+	tls := nodeTlsSettings(node)
+	if !tls.HasCertFields {
+		return nil, false, false
+	}
+	certDomain := strings.TrimSpace(tls.PrimaryServerName())
+	if certDomain == "" && cm != nil {
+		certDomain = strings.TrimSpace(cm.ServerName)
+	}
+	if certDomain == "" && cm != nil {
+		certDomain = strings.TrimSpace(cm.Host)
+	}
+	certFile := strings.TrimSpace(tls.CertFile)
+	if certFile == "" {
+		certFile = filepath.Join("/etc/V2bZ", "node-"+strconv.Itoa(nodeID)+".cer")
+	}
+	keyFile := strings.TrimSpace(tls.KeyFile)
+	if keyFile == "" {
+		keyFile = filepath.Join("/etc/V2bZ", "node-"+strconv.Itoa(nodeID)+".key")
+	}
+
+	return &conf.CertConfig{
+		CertMode:         strings.TrimSpace(tls.CertMode),
+		CertFile:         certFile,
+		KeyFile:          keyFile,
+		Email:            "node@zicboard.local",
+		CertDomain:       certDomain,
+		DNSEnv:           parseDNSEnv(tls.DNSEnv),
+		Provider:         strings.TrimSpace(tls.Provider),
+		SelfFallback:     tls.SelfFallback,
+		RejectUnknownSni: tls.RejectUnknownSni,
+	}, tls.HasSelfFallback, tls.HasRejectUnknownSni
+}
+
+func parseDNSEnv(value string) map[string]string {
+	result := make(map[string]string)
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return result
+	}
+	if strings.HasPrefix(value, "{") {
+		var decoded map[string]string
+		if err := json.Unmarshal([]byte(value), &decoded); err == nil {
+			for k, v := range decoded {
+				key := strings.TrimSpace(k)
+				if key != "" {
+					result[key] = v
+				}
+			}
+			return result
+		}
+	}
+	envs := strings.FieldsFunc(value, func(r rune) bool {
+		return r == ',' || r == '\n' || r == '\r'
+	})
+	for _, env := range envs {
+		kv := strings.SplitN(env, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(kv[0])
+		if key != "" {
+			result[key] = strings.TrimSpace(kv[1])
+		}
+	}
+	return result
+}
+
+func normalizeRawJSON(value json.RawMessage) json.RawMessage {
+	trimmed := bytes.TrimSpace(value)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+	if bytes.Equal(trimmed, []byte("[]")) {
+		return json.RawMessage(`{}`)
+	}
+	return trimmed
+}
+
+func routeMatchesToStrings(match interface{}) []string {
+	switch value := match.(type) {
+	case nil:
+		return nil
+	case string:
+		if value == "" {
+			return nil
+		}
+		return strings.Split(value, ",")
+	case []string:
+		return value
+	case []interface{}:
+		matches := make([]string, 0, len(value))
+		for _, item := range value {
+			if text, ok := item.(string); ok && text != "" {
+				matches = append(matches, text)
+			}
+		}
+		return matches
+	default:
+		return nil
 	}
 }

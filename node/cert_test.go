@@ -1,7 +1,15 @@
 package node
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func Test_generateSelfSslCertificate(t *testing.T) {
-	t.Log(generateSelfSslCertificate("domain.com", "1.pem", "1.key"))
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "cert.pem")
+	keyPath := filepath.Join(dir, "cert.key")
+	if err := generateSelfSslCertificate("domain.com", certPath, keyPath); err != nil {
+		t.Fatalf("generate self-signed certificate: %v", err)
+	}
 }

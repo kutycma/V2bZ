@@ -3,8 +3,8 @@ FROM golang:1.25.0-alpine AS builder
 WORKDIR /app
 COPY . .
 ENV CGO_ENABLED=0
-RUN GOEXPERIMENT=jsonv2 go mod download
-RUN GOEXPERIMENT=jsonv2 go build -v -o V2bZ -tags "sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor"
+RUN go mod download
+RUN go build -v -o V2bZ -tags "sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor"
 
 # Release
 FROM  alpine

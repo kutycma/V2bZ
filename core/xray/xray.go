@@ -1,11 +1,10 @@
 package xray
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"sync"
-
-	"encoding/json/v2"
 
 	"github.com/kutycma/V2bZ/conf"
 	vCore "github.com/kutycma/V2bZ/core"

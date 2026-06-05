@@ -59,6 +59,8 @@ func New(c *conf.ApiConfig) (*Client, error) {
 	switch c.NodeType {
 	case "v2ray":
 		c.NodeType = "vmess"
+	case "zicnode", "v2node":
+		return nil, fmt.Errorf("V2bZ chỉ hỗ trợ node legacy qua UniProxy, vui lòng chọn vmess/vless/trojan/shadowsocks/hysteria/hysteria2/tuic/anytls thay vì %s", c.NodeType)
 	case
 		"vmess",
 		"trojan",
@@ -69,7 +71,7 @@ func New(c *conf.ApiConfig) (*Client, error) {
 		"anytls",
 		"vless":
 	default:
-		return nil, fmt.Errorf("unsupported Node type: %s", c.NodeType)
+		return nil, fmt.Errorf("V2bZ không hỗ trợ NodeType %q. Các loại hợp lệ: vmess, vless, trojan, shadowsocks, hysteria, hysteria2, tuic, anytls", c.NodeType)
 	}
 	// set params
 	client.SetQueryParams(map[string]string{

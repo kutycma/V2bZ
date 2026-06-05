@@ -1,82 +1,138 @@
 # V2bZ
 
-Backend node V2board dựa trên nhiều core, được phát triển từ XrayR.
+Backend node cho ZicBoard/V2Board theo hướng UniProxy legacy, phát triển từ nền XrayR/V2bX và hỗ trợ nhiều core.
 
-**Lưu ý:** dự án này cần dùng cùng bản V2board đã chỉnh sửa: https://github.com/wyx2685/v2board
+## Lưu Ý Quan Trọng Cho ZicBoard
 
-## Tính năng
+V2bZ dùng API UniProxy legacy:
 
-* Mã nguồn mở và miễn phí.
-* Hỗ trợ Vmess/Vless, Trojan, Shadowsocks, Hysteria1/2 và nhiều giao thức khác.
-* Hỗ trợ Vless, XTLS và các tính năng mới liên quan.
-* Một instance có thể kết nối nhiều node, không cần chạy nhiều tiến trình lặp lại.
-* Hỗ trợ giới hạn IP online.
-* Hỗ trợ giới hạn số kết nối TCP.
-* Hỗ trợ giới hạn tốc độ theo cổng node và theo user.
-* Cấu hình rõ ràng, dễ chỉnh.
-* Tự khởi động lại instance khi cấu hình thay đổi.
-* Hỗ trợ nhiều core, dễ mở rộng.
-* Hỗ trợ build theo tag để chỉ biên dịch core cần dùng.
+```text
+/api/v3/server/UniProxy/config
+/api/v3/server/UniProxy/user
+/api/v3/server/UniProxy/push
+/api/v3/server/UniProxy/alive
+```
 
-## Ma trận tính năng
+Vì vậy trong ZicBoard hãy tạo node legacy riêng như `VMess`, `VLess`, `Trojan`, `Shadowsocks`. Không chọn `ZicNode` hoặc `V2Node` khi dùng V2bZ; hai loại node gom đó thuộc backend ZicNode riêng.
 
-| Tính năng | v2ray | trojan | shadowsocks | hysteria1/2 |
-|---|---|---|---|---|
-| Tự xin chứng chỉ TLS | Có | Có | Có | Có |
-| Tự gia hạn chứng chỉ TLS | Có | Có | Có | Có |
-| Thống kê user online | Có | Có | Có | Có |
-| Rule audit | Có | Có | Có | Có |
-| DNS tuỳ chỉnh | Có | Có | Có | Có |
-| Giới hạn số IP online | Có | Có | Có | Có |
-| Giới hạn số kết nối | Có | Có | Có | Có |
-| Giới hạn IP xuyên node | Có | Có | Có | Có |
-| Giới hạn tốc độ theo user | Có | Có | Có | Có |
-| Giới hạn tốc độ động (chưa kiểm thử) | Có | Có | Có | Có |
+## Matrix Hỗ Trợ
 
-## TODO
+| Core | NodeType hỗ trợ |
+|---|---|
+| `xray` | `shadowsocks`, `vmess`, `vless`, `trojan` |
+| `sing` | `shadowsocks`, `vmess`, `vless`, `trojan`, `hysteria`, `hysteria2`, `tuic`, `anytls` |
+| `hysteria2` | `hysteria2` |
 
-- [ ] Làm lại giới hạn tốc độ động
-- [ ] Hoàn thiện tài liệu sử dụng
+Network khuyến nghị khi dùng `xray`:
 
-## Cài đặt
+| Protocol | Network hỗ trợ |
+|---|---|
+| `vmess`, `vless` | `tcp`, `ws`, `grpc`, `httpupgrade`, `xhttp` |
+| `trojan` | `tcp`, `ws`, `grpc` |
 
-### Cài đặt một lệnh
+Nếu cấu hình nhầm `NodeType=zicnode` hoặc `v2node`, V2bZ sẽ báo lỗi và yêu cầu chọn node legacy qua UniProxy.
+
+## Cài Đặt Một Lệnh
+
+Wizard tiếng Việt:
 
 ```bash
 wget -N https://raw.githubusercontent.com/kutycma/V2bZ-script/master/install.sh && bash install.sh
 ```
 
-### Cài đặt thủ công
+Cài nhanh:
 
-[Hướng dẫn cài đặt thủ công](https://v2bz.v-50.me/v2bz/v2bz-xia-zai-he-an-zhuang/install/manual)
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/kutycma/V2bZ-script/master/install.sh) \
+  --quick \
+  --api-host https://panel.example.com \
+  --api-key SERVER_TOKEN \
+  --node-id 1 \
+  --node-type vless \
+  --core xray
+```
+
+Xem config trước khi cài:
+
+```bash
+bash install.sh --quick --dry-run \
+  --api-host https://panel.example.com \
+  --api-key SERVER_TOKEN \
+  --node-id 1 \
+  --node-type vless \
+  --core xray
+```
+
+## Auto TLS Và Pinned Cert
+
+Khuyến nghị bật Auto TLS ngay trong panel ZicBoard cho các node legacy có TLS: `vmess`, `vless`, `trojan`, `hysteria/hysteria2`, `tuic`, `anytls`. V2bZ ưu tiên đọc `tls_settings`/`tlsSettings` từ panel; nếu panel không gửi cấu hình cert thì mới dùng `CertConfig` local trong file config.
+
+Khi cấp hoặc renew cert thành công, V2bZ report `sha256`, `source` và `not_after` về `/api/v3/server/UniProxy/cert/report`. ZicBoard dùng `auto_cert.sha256` để tự sinh `pinnedPeerCertSha256` cho client. `shadowsocks` không dùng Auto TLS inbound trong phạm vi này.
+
+Local `CertConfig` có thể dùng làm fallback:
+
+```json
+"CertConfig": {
+  "CertMode": "none",
+  "SelfFallback": false,
+  "CertDomain": "",
+  "CertFile": "/etc/V2bZ/fullchain.cer",
+  "KeyFile": "/etc/V2bZ/cert.key",
+  "Provider": "",
+  "DNSEnv": {}
+}
+```
+
+## Config Keys Chính
+
+Ví dụ node config tối thiểu:
+
+```json
+{
+  "Core": "xray",
+  "ApiHost": "https://panel.example.com",
+  "ApiKey": "SERVER_TOKEN",
+  "NodeID": 1,
+  "NodeType": "vless",
+  "ListenIP": "0.0.0.0",
+  "SendIP": "0.0.0.0",
+  "DeviceOnlineMinTraffic": 200,
+  "ReportMinTraffic": 0,
+  "EnableTFO": true,
+  "CertConfig": {
+    "CertMode": "none",
+    "CertFile": "/etc/V2bZ/fullchain.cer",
+    "KeyFile": "/etc/V2bZ/cert.key"
+  }
+}
+```
+
+Script mới dùng `ReportMinTraffic`, `EnableTFO`, `EnableSniff`; không dùng các key cũ `MinReportTraffic`, `TCPFastOpen`, `SniffEnabled`.
 
 ## Build
 
+Không cần `GOEXPERIMENT=jsonv2`.
+
 ```bash
-# Dùng -tags để chọn core cần biên dịch: xray, sing, hysteria2
-GOEXPERIMENT=jsonv2 go build -v -o build_assets/V2bZ -tags "sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor" -trimpath -ldflags "-X 'github.com/kutycma/V2bZ/cmd.version=$version' -s -w -buildid="
+go test ./...
+
+go build \
+  -tags "sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor" \
+  -o build_assets/V2bZ \
+  -trimpath \
+  -ldflags "-X 'github.com/kutycma/V2bZ/cmd.version=$version' -s -w -buildid="
 ```
 
-## Cấu hình và tài liệu
+## Lệnh Quản Lý Sau Khi Cài
 
-[Tài liệu sử dụng chi tiết](https://v2bz.v-50.me/)
+```bash
+V2bZ            # mở menu
+V2bZ status     # xem trạng thái
+V2bZ log        # xem log
+V2bZ generate   # tạo lại config UniProxy
+V2bZ restart    # khởi động lại service
+```
 
-## Miễn trừ trách nhiệm
+## Miễn Trừ Trách Nhiệm
 
-* Dự án phục vụ nhu cầu cá nhân nên không cam kết tương thích ngược.
-* Không cam kết mọi tính năng đều hoạt động trong mọi môi trường; nếu gặp lỗi hãy mở issue.
-* Người dùng tự chịu trách nhiệm với mọi hậu quả phát sinh từ việc sử dụng dự án.
-* Cấu trúc dự án có thể thay đổi theo nhu cầu phát triển.
-
-## Cảm ơn
-
-* [Project X](https://github.com/XTLS/)
-* [V2Fly](https://github.com/v2fly)
-* [VNet-V2ray](https://github.com/ProxyPanel/VNet-V2ray)
-* [Air-Universe](https://github.com/crossfw/Air-Universe)
-* [XrayR](https://github.com/XrayR/XrayR)
-* [sing-box](https://github.com/SagerNet/sing-box)
-
-## Lịch sử sao
-
-[![Stargazers over time](https://starchart.cc/kutycma/V2bZ.svg)](https://starchart.cc/kutycma/V2bZ)
+Dự án phục vụ nhu cầu vận hành riêng. Hãy kiểm tra kỹ trên node thử nghiệm trước khi dùng production, đặc biệt với TLS/Reality/network nâng cao.
